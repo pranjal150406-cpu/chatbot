@@ -1,0 +1,14 @@
+{
+  "name": "fullstack-ai-chatbot",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n \"backend,frontend\" -c \"cyan.bold,magenta.bold\" --kill-others \"cd backend && venv\\Scripts\\python.exe main.py\" \"cd frontend && npm run dev\"",
+    "start": "concurrently -n \"backend,frontend\" -c \"cyan.bold,magenta.bold\" --kill-others \"cd backend && venv\\Scripts\\python.exe main.py\" \"cd frontend && npm run dev\"",
+    "backend": "cd backend && venv\\Scripts\\python.exe main.py",
+    "frontend": "cd frontend && npm run dev"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
+  }
+}

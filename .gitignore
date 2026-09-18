@@ -1,0 +1,44 @@
+﻿# Environment Variables & Secrets (NEVER COMMIT API KEYS)
+.env
+*.env
+.env.local
+.env.*.local
+backend/.env
+
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Python Virtual Environments & Bytecode
+venv/
+.venv/
+env/
+backend/venv/
+__pycache__/
+*/__pycache__/
+*.py[cod]
+*$py.class
+
+# Databases & Local Storage
+*.db
+*.sqlite3
+backend/chats.db
+
+# Frontend Builds & Caches
+dist/
+frontend/dist/
+.vite/
+
+# Editor & OS artifacts
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
