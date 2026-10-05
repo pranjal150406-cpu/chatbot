@@ -23,8 +23,8 @@ async def chat_endpoint(request: ChatRequest):
             detail=f"Configuration error: {str(ve)}"
         )
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        import logging
+        logging.getLogger("uvicorn.error").exception("Chat request failed")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"AI service connection failed: {str(e)}"

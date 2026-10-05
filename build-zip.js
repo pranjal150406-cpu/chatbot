@@ -120,13 +120,21 @@ const ignoreList = [
   '__pycache__',
   '.git',
   '.DS_Store',
-  'ai-chatbot-app.zip'
+  'ai-chatbot-app.zip',
+  'chats.db',
+  'chats.sqlite3'
 ];
+
+function shouldIgnore(item) {
+  return ignoreList.includes(item)
+    || item === '.env'
+    || (item.startsWith('.env.') && item !== '.env.example');
+}
 
 function addDirToZip(currentDir, baseDir = '') {
   const items = fs.readdirSync(currentDir);
   for (const item of items) {
-    if (ignoreList.includes(item)) continue;
+    if (shouldIgnore(item)) continue;
     const fullPath = path.join(currentDir, item);
     const relPath = path.join(baseDir, item);
     const stat = fs.statSync(fullPath);

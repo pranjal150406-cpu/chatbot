@@ -13,11 +13,29 @@ import './MessageBubble.css';
  * 1. Converts \[ ... \] to $$ ... $$ (display math)
  * 2. Converts \( ... \) to $ ... $ (inline math)
  */
+function normalizeMathText(content) {
+  return content
+    // Convert the alternate LaTeX delimiters to the syntax remark-math reads.
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_, eq) => `$$\n${eq.trim()}\n$$`)
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_, eq) => `$${eq.trim()}$`)
+    // Some model responses escape the opening/closing dollar signs. Only
+    // unescape a span that contains LaTeX syntax, so currency stays literal.
+    .replace(/\\\$([^$\n]+?)\\?\$/g, (match, expression) => {
+      return /\\[a-zA-Z]+|[{}_^]/.test(expression) ? `$${expression}$` : match;
+    })
+    // Repair a common malformed amount such as \44\text{billion}$ where
+    // the opening dollar was omitted and the slash before the number is stray.
+    .replace(/\\(?=(\d+\\text\{[^{}\n]*\})\\?\$)(\d+\\text\{[^{}\n]*\})\\?\$/g, (_, expression) => `$${expression}$`);
+}
+
 function preprocessLaTeX(content) {
   if (!content) return '';
+
+  // Do not rewrite delimiters inside code examples.
   return content
-    .replace(/\\\[([\s\S]*?)\\\]/g, (_, eq) => `$$\n${eq.trim()}\n$$`)
-    .replace(/\\\(([\s\S]*?)\\\)/g, (_, eq) => `$${eq.trim()}$`);
+    .split(/(```[\s\S]*?```|~~~[\s\S]*?~~~|`+[^`]*`+)/g)
+    .map((part) => (part.startsWith('`') || part.startsWith('~') ? part : normalizeMathText(part)))
+    .join('');
 }
 
 export default function MessageBubble({ message }) {

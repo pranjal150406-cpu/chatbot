@@ -35,7 +35,7 @@ export default function Header({
           onClick={onRefreshHealth}
           title={
             backendStatus.online
-              ? 'Connected to Gemini LLM (Online)'
+              ? 'Backend is online'
               : 'Backend server offline (Click to retry)'
           }
           role="button"
@@ -46,7 +46,7 @@ export default function Header({
             {backendStatus.checking
               ? 'Checking...'
               : backendStatus.online
-              ? (backendStatus.model ? backendStatus.model.replace('gemini-', 'Gemini ').replace('-flash', '') : 'Gemini 3.6')
+              ? 'Backend Online'
               : 'Offline'}
           </span>
         </div>

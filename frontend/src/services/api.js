@@ -41,9 +41,10 @@ export async function sendChatMessage(messages) {
  * @returns {Promise<{online: boolean, provider?: string, error?: string}>}
  */
 export async function checkHealth() {
+  let timeoutId;
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    timeoutId = setTimeout(() => controller.abort(), 3500);
     const response = await fetch(`${API_BASE_URL}/api/health`, {
       signal: controller.signal,
     });
@@ -55,6 +56,8 @@ export async function checkHealth() {
     return { online: false, error: `HTTP ${response.status}` };
   } catch (err) {
     return { online: false, error: err.message };
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 

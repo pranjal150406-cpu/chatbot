@@ -87,20 +87,22 @@ class GeminiProvider(BaseLLMProvider):
 
         # Build conversation history in Google GenAI SDK contents format
         contents = []
-        system_instruction = (
+        system_instructions = [
             "You are an intelligent, helpful, and conversational AI assistant. "
             "You can answer questions on any topic, including general knowledge, economics, "
             "science, technology, programming, mathematics, algorithms, writing, and current events.\n\n"
             f"{temporal_info}\n\n"
             "Provide accurate, clear, and well-structured markdown answers. "
+            "Distinguish verified current facts from general knowledge. Do not invent live news or sources; "
+            "when current information is uncertain, say so plainly. "
             "When writing mathematical expressions, symbols, or equations, always format them using "
             "standard LaTeX notation: use $...$ for inline math (e.g. $x^2 + y^2 = r^2$, $\\infty$) "
             "and $$...$$ on separate lines for block/display math."
-        )
+        ]
 
         for msg in messages:
             if msg.role == "system":
-                system_instruction = msg.content
+                system_instructions.append(msg.content)
                 continue
             
             # Map role names ('assistant' -> 'model')
@@ -113,16 +115,17 @@ class GeminiProvider(BaseLLMProvider):
             )
 
         config = types.GenerateContentConfig(
-            system_instruction=system_instruction,
+            system_instruction="\n\n".join(system_instructions),
             temperature=0.7,
         )
 
-        # Candidate fallback models in priority order
+        # Keep the configured model first. The remaining IDs are stable Gemini
+        # API model IDs that can be used if the configured ID is unavailable.
         candidate_models = [
             self.model_name,
+            "gemini-3.8-flash",
             "gemini-3.6-flash",
-            "gemini-3.5-flash-lite",
-            "gemini-flash-lite-latest",
+            "gemini-flash-latest",
         ]
         models_to_try = []
         for m in candidate_models:
@@ -131,26 +134,36 @@ class GeminiProvider(BaseLLMProvider):
 
         last_error = None
         for current_model in models_to_try:
-            for attempt in range(2):
+            for attempt in range(3):
                 try:
-                    response = self.client.models.generate_content(
+                    # google-genai's generate_content method is synchronous.
+                    # Keep its network wait off FastAPI's event loop.
+                    response = await asyncio.to_thread(
+                        self.client.models.generate_content,
                         model=current_model,
                         contents=contents,
-                        config=config
+                        config=config,
                     )
                     if response and response.text:
                         return response.text
+                    raise RuntimeError("Gemini returned an empty response")
                 except Exception as e:
                     err_str = str(e)
                     last_error = e
                     logger.warning(f"[GeminiProvider] Model '{current_model}' attempt {attempt + 1} failed: {err_str}")
-                    
-                    # If transient high-demand (503) or rate-limit (429), retry after brief backoff
-                    is_transient = any(code in err_str for code in ["503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED", "504"])
-                    if is_transient and attempt == 0:
-                        await asyncio.sleep(1.2)
+
+                    # Retry temporary server and quota errors with short backoff.
+                    is_transient = any(code in err_str for code in ("503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED", "504"))
+                    if is_transient and attempt < 2:
+                        await asyncio.sleep(1.0 * (attempt + 1))
                         continue
-                    # Otherwise, cascade to the next fallback model
+
+                    # Only try another model when this model ID is unavailable.
+                    # Invalid keys, quota errors, and request errors won't be
+                    # fixed by sending the same request to another model.
+                    is_model_unavailable = any(code in err_str.lower() for code in ("404", "not found", "not supported"))
+                    if not is_model_unavailable:
+                        break
                     break
 
         # If all candidate models failed, return a clean user-facing error message
@@ -159,8 +172,11 @@ class GeminiProvider(BaseLLMProvider):
             raise Exception("Google Gemini servers are currently experiencing temporary high traffic. Please try sending your message again in a few moments.")
         elif any(code in err_msg for code in ["429", "RESOURCE_EXHAUSTED"]):
             raise Exception("Rate limit reached on the AI service. Please wait a moment before sending another message.")
+        elif any(code in err_msg.lower() for code in ("api key", "unauthorized", "permission_denied", "401", "403")):
+            raise Exception("Gemini rejected the API credentials. Check GEMINI_API_KEY and API access for the selected model.")
         else:
-            raise Exception(f"Gemini API Error: {err_msg}")
+            logger.error("Gemini request failed: %s", err_msg)
+            raise Exception("Gemini could not complete this request. Check the backend logs and try again.")
 
 class LLMService:
     """Abstraction layer factory allowing switching between AI providers seamlessly."""

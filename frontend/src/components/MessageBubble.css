@@ -195,11 +195,6 @@
   max-width: 100%;
 }
 
-.message-content .katex-display > .katex {
-  white-space: normal;
-  display: block;
-}
-
 @keyframes message-fade-in {
   from {
     opacity: 0;

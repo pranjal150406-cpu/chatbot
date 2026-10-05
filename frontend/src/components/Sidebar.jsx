@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, MessageSquare, Trash2, Edit2, Check, ChevronLeft, Settings, Clock } from 'lucide-react';
+import { Bot, Plus, MessageSquare, Trash2, Edit2, Check, ChevronLeft, Settings, Clock } from 'lucide-react';
 import './Sidebar.css';
 
 function formatTimestamp(isoString) {
@@ -65,14 +65,20 @@ export default function Sidebar({
 
       <aside className={`sidebar ${isCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-header">
-          <button
-            className="collapse-toggle-btn"
-            onClick={onToggleCollapse}
-            title="Close sidebar"
-            aria-label="Close sidebar"
-          >
-            <ChevronLeft size={20} />
-          </button>
+          <div className="sidebar-brand-row">
+            <button
+              className="collapse-toggle-btn"
+              onClick={onToggleCollapse}
+              title="Close sidebar"
+              aria-label="Close sidebar"
+            >
+              <ChevronLeft size={20} />
+            </button>
+            <div className="sidebar-brand" aria-label="AI Chat Assistant">
+              <Bot size={20} />
+              <span>AI Chat Assistant</span>
+            </div>
+          </div>
           <button className="new-chat-btn" onClick={onNewChat} title="Start New Chat">
             <Plus size={18} />
             <span>New Chat</span>

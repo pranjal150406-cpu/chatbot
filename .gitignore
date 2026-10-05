@@ -4,6 +4,8 @@
 .env.local
 .env.*.local
 backend/.env
+!.env.example
+!backend/.env.example
 
 # Dependencies
 node_modules/

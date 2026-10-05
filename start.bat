@@ -1,25 +1,18 @@
 @echo off
-title AI Chatbot Launcher
+setlocal
+cd /d "%~dp0"
+if not exist "backend\venv\Scripts\python.exe" call setup.bat
+if errorlevel 1 exit /b 1
+if not exist "frontend\node_modules\vite\bin\vite.js" call setup.bat
+if errorlevel 1 exit /b 1
+
 echo ========================================================
 echo        STARTING AI CHATBOT (FRONTEND + BACKEND)
 echo ========================================================
 echo.
-
-echo [1/2] Starting FastAPI Backend on http://localhost:8000 ...
-start "AI Chatbot Backend (Port 8000)" cmd /k "cd /d "%~dp0backend" && .\venv\Scripts\python.exe main.py"
-
-timeout /t 2 /nobreak >nul
-
-echo [2/2] Starting Vite Frontend on http://localhost:5173 ...
-start "AI Chatbot Frontend (Port 5173)" cmd /k "cd /d "%~dp0frontend" && npm run dev"
-
-echo.
-echo ========================================================
-echo Both servers are starting up!
-echo  - Frontend UI : http://localhost:5173
-echo  - Backend API : http://localhost:8000
-echo ========================================================
-echo Keep the opened command windows running while chatting.
-echo.
+start "AI Chatbot Backend (Port 8000)" cmd /k "cd /d ""%~dp0backend"" ^&^& ""%~dp0backend\venv\Scripts\python.exe"" main.py"
+start "AI Chatbot Frontend (Port 5173)" cmd /k "cd /d ""%~dp0frontend"" ^&^& npm run dev"
+echo Frontend : http://localhost:5173
+echo Backend  : http://localhost:8000
 timeout /t 3 /nobreak >nul
 start http://localhost:5173
