@@ -48,7 +48,11 @@ async def root():
 @app.get("/api/health")
 async def health_check():
     """Simple health check endpoint."""
-    return {"status": "ok", "provider": os.getenv("LLM_PROVIDER", "gemini")}
+    return {
+        "status": "ok",
+        "provider": os.getenv("LLM_PROVIDER", "gemini"),
+        "model": os.getenv("LLM_MODEL", "gemini-3.6-flash"),
+    }
 
 if __name__ == "__main__":
     import uvicorn

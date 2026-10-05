@@ -46,7 +46,7 @@ export default function Header({
             {backendStatus.checking
               ? 'Checking...'
               : backendStatus.online
-              ? 'Gemini 3.5'
+              ? (backendStatus.model ? backendStatus.model.replace('gemini-', 'Gemini ').replace('-flash', '') : 'Gemini 3.6')
               : 'Offline'}
           </span>
         </div>

@@ -1,4 +1,6 @@
 import os
+import asyncio
+import logging
 from typing import List, Optional
 from datetime import datetime, timezone
 import zoneinfo
@@ -6,6 +8,8 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 from models.chat import Message
+
+logger = logging.getLogger("uvicorn.error")
 
 # Guarantee .env is loaded
 load_dotenv()
@@ -21,13 +25,13 @@ class BaseLLMProvider:
         raise NotImplementedError("Providers must implement generate_response")
 
 class GeminiProvider(BaseLLMProvider):
-    """Google Gemini LLM Provider implementation using the official google-genai SDK."""
+    """Google Gemini LLM Provider implementation with automatic retry and model fallback cascade."""
     def __init__(self):
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             raise ValueError("GEMINI_API_KEY environment variable is missing.")
         
-        self.model_name = os.getenv("LLM_MODEL", "gemini-3.5-flash")
+        self.model_name = os.getenv("LLM_MODEL", "gemini-3.6-flash")
         self.client = genai.Client(api_key=api_key)
 
     def _build_temporal_context(self, client_time: Optional[str] = None, client_timezone: Optional[str] = None) -> str:
@@ -78,57 +82,85 @@ class GeminiProvider(BaseLLMProvider):
         client_time: Optional[str] = None,
         client_timezone: Optional[str] = None
     ) -> str:
-        try:
-            # Build current temporal context
-            temporal_info = self._build_temporal_context(client_time, client_timezone)
+        # Build current temporal context
+        temporal_info = self._build_temporal_context(client_time, client_timezone)
 
-            # Build conversation history in Google GenAI SDK contents format
-            contents = []
-            system_instruction = (
-                "You are an intelligent, helpful, and conversational AI assistant. "
-                "You can answer questions on any topic, including general knowledge, economics, "
-                "science, technology, programming, mathematics, algorithms, writing, and current events.\n\n"
-                f"{temporal_info}\n\n"
-                "Provide accurate, clear, and well-structured markdown answers. "
-                "When writing mathematical expressions, symbols, or equations, always format them using "
-                "standard LaTeX notation: use $...$ for inline math (e.g. $x^2 + y^2 = r^2$, $\\infty$) "
-                "and $$...$$ on separate lines for block/display math."
-            )
+        # Build conversation history in Google GenAI SDK contents format
+        contents = []
+        system_instruction = (
+            "You are an intelligent, helpful, and conversational AI assistant. "
+            "You can answer questions on any topic, including general knowledge, economics, "
+            "science, technology, programming, mathematics, algorithms, writing, and current events.\n\n"
+            f"{temporal_info}\n\n"
+            "Provide accurate, clear, and well-structured markdown answers. "
+            "When writing mathematical expressions, symbols, or equations, always format them using "
+            "standard LaTeX notation: use $...$ for inline math (e.g. $x^2 + y^2 = r^2$, $\\infty$) "
+            "and $$...$$ on separate lines for block/display math."
+        )
 
-            for msg in messages:
-                if msg.role == "system":
-                    system_instruction = msg.content
-                    continue
-                
-                # Map role names ('assistant' -> 'model')
-                role = "model" if msg.role == "assistant" else "user"
-                contents.append(
-                    types.Content(
-                        role=role,
-                        parts=[types.Part.from_text(text=msg.content)]
-                    )
-                )
-
-            config = types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                temperature=0.7,
-            )
-
-            # Synchronous client call wrapped safely
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=contents,
-                config=config
-            )
+        for msg in messages:
+            if msg.role == "system":
+                system_instruction = msg.content
+                continue
             
-            if not response or not response.text:
-                raise Exception("Received empty response from Gemini API.")
+            # Map role names ('assistant' -> 'model')
+            role = "model" if msg.role == "assistant" else "user"
+            contents.append(
+                types.Content(
+                    role=role,
+                    parts=[types.Part.from_text(text=msg.content)]
+                )
+            )
 
-            return response.text
+        config = types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            temperature=0.7,
+        )
 
-        except Exception as e:
-            # Cleanly re-raise for upstream handling
-            raise Exception(f"Gemini API Error: {str(e)}")
+        # Candidate fallback models in priority order
+        candidate_models = [
+            self.model_name,
+            "gemini-3.6-flash",
+            "gemini-3.5-flash-lite",
+            "gemini-flash-lite-latest",
+        ]
+        models_to_try = []
+        for m in candidate_models:
+            if m and m not in models_to_try:
+                models_to_try.append(m)
+
+        last_error = None
+        for current_model in models_to_try:
+            for attempt in range(2):
+                try:
+                    response = self.client.models.generate_content(
+                        model=current_model,
+                        contents=contents,
+                        config=config
+                    )
+                    if response and response.text:
+                        return response.text
+                except Exception as e:
+                    err_str = str(e)
+                    last_error = e
+                    logger.warning(f"[GeminiProvider] Model '{current_model}' attempt {attempt + 1} failed: {err_str}")
+                    
+                    # If transient high-demand (503) or rate-limit (429), retry after brief backoff
+                    is_transient = any(code in err_str for code in ["503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED", "504"])
+                    if is_transient and attempt == 0:
+                        await asyncio.sleep(1.2)
+                        continue
+                    # Otherwise, cascade to the next fallback model
+                    break
+
+        # If all candidate models failed, return a clean user-facing error message
+        err_msg = str(last_error) if last_error else "Unknown error"
+        if any(code in err_msg for code in ["503", "UNAVAILABLE"]):
+            raise Exception("Google Gemini servers are currently experiencing temporary high traffic. Please try sending your message again in a few moments.")
+        elif any(code in err_msg for code in ["429", "RESOURCE_EXHAUSTED"]):
+            raise Exception("Rate limit reached on the AI service. Please wait a moment before sending another message.")
+        else:
+            raise Exception(f"Gemini API Error: {err_msg}")
 
 class LLMService:
     """Abstraction layer factory allowing switching between AI providers seamlessly."""

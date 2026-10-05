@@ -50,7 +50,7 @@ export async function checkHealth() {
     clearTimeout(timeoutId);
     if (response.ok) {
       const data = await response.json();
-      return { online: true, provider: data.provider || 'gemini' };
+      return { online: true, provider: data.provider || 'gemini', model: data.model || 'gemini-3.6-flash' };
     }
     return { online: false, error: `HTTP ${response.status}` };
   } catch (err) {
